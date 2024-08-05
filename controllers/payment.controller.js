@@ -189,7 +189,15 @@ exports.getPayments = async (req, res, next) => {
         take: limit,
         skip: skip,
         include: {
-          user: true,
+          user: {
+            include: {
+              my_room: {
+                include: {
+                  room: true,
+                },
+              },
+            },
+          },
           room: true,
         },
         orderBy: {
