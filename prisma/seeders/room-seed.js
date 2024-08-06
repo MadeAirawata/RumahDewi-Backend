@@ -6,7 +6,7 @@ async function RoomSeeder() {
     for (let i = 1; i <= 11; i++) {
       data.push({
         no_room: i,
-        monthly_price: 500000,
+        monthly_price: 1200000,
       });
     }
     try {
