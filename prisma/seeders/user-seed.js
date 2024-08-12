@@ -8,6 +8,7 @@ async function UserSeeder() {
         name: "Admin",
         email: "admin@admin.com",
         password: await bcrypt.hash("admin12345", 10),
+        identity: "https://res.cloudinary.com/dqrwj7w5l/image/upload/v1723125827/a81m8bpo902c4ou22bog.jpg",
         role: "ADMIN",
       },
       {
@@ -15,6 +16,7 @@ async function UserSeeder() {
         email: "user@user.com",
         phone: "6281314206253",
         password: await bcrypt.hash("user12345", 10),
+        identity: "https://res.cloudinary.com/dqrwj7w5l/image/upload/v1723125827/a81m8bpo902c4ou22bog.jpg",
         role: "USER",
       },
     ];
@@ -25,9 +27,6 @@ async function UserSeeder() {
         await prisma.user.create({
           data: {
             ...item,
-            my_room: {
-              create: {},
-            },
           },
         });
       }

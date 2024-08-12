@@ -3,6 +3,9 @@ const prisma = new PrismaClient();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = process.env;
+const { uploader } = require("../libs/cloudinary.libs");
+const crypto = require("crypto");
+const path = require("path");
 
 exports.whoami = async (req, res, next) => {
   try {
@@ -91,6 +94,7 @@ exports.register = async (req, res, next) => {
   try {
     // Destructures 'name', 'email', and 'password' from the request body
     const { name, email, password, phone } = req.body;
+    const image = req?.files?.image;
 
     // Checks if 'name', 'email', or 'password' is missing, returns a 400 response if true
     if (!name || !email || !password || !phone) {
@@ -124,6 +128,19 @@ exports.register = async (req, res, next) => {
       });
     }
 
+    if (!image) {
+      return res.status(400).json({
+        status: false,
+        message: "Foto identitas harus disertakan",
+        data: null,
+      });
+    }
+
+    image.publicId = crypto.randomBytes(16).toString("hex");
+    image.name = `${image.publicId}${path.parse(image.name).ext}`;
+
+    const imageUpload = await uploader(image);
+
     // Hashes the password using bcrypt with a salt round of 10
     let encryptedPassword = await bcrypt.hash(password, 10);
 
@@ -134,9 +151,7 @@ exports.register = async (req, res, next) => {
         email,
         phone,
         password: encryptedPassword,
-        my_room: {
-          create: {},
-        },
+        identity: imageUpload.secure_url,
       },
     });
 

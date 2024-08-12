@@ -30,40 +30,38 @@ enum ROOM_STATUS {
   TERISI
 }
 
+enum USER_STATUS {
+  CALON
+  BARU
+  LAMA
+}
+
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  phone     String?   @unique
-  name      String
-  password  String
-  role      ROLE      @default(USER)
-  my_room   UserRoom?
-  payments  Payment[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String      @id @default(uuid())
+  email          String      @unique
+  phone          String?     @unique
+  identity       String?
+  name           String
+  password       String
+  role           ROLE        @default(USER)
+  room           Room?
+  due_date       DateTime?
+  occupied_since DateTime?
+  status         USER_STATUS @default(CALON)
+  payments       Payment[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   @@map("users")
 }
 
-model UserRoom {
-  id        String    @id @default(uuid())
-  user_id   String    @unique
-  user      User      @relation(fields: [user_id], references: [id])
-  room_id   String?   @unique
-  room      Room?     @relation(fields: [room_id], references: [id])
-  due_date  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  @@map("user_rooms")
-}
-
 model Room {
   id            String      @id @default(uuid())
+  user_id       String?     @unique
+  user          User?       @relation(fields: [user_id], references: [id])
   no_room       Int         @unique @db.SmallInt
   monthly_price Int
   status        ROOM_STATUS @default(TERSEDIA)
-  user_room     UserRoom?
   payments      Payment[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -77,6 +75,7 @@ model Payment {
   user          User           @relation(fields: [user_id], references: [id])
   room_id       String
   room          Room           @relation(fields: [room_id], references: [id])
+  rent_for      DateTime?
   total_month   Int            @db.SmallInt
   total_payment Int
   payment_image String?

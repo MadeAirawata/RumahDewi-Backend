@@ -4,10 +4,14 @@ const { uploader } = require("../libs/cloudinary.libs");
 const prisma = new PrismaClient();
 const crypto = require("crypto");
 const path = require("path");
+const { checkRooms } = require("../libs/checkrooms.libs");
 
 exports.rentRoom = async (req, res, next) => {
   try {
-    const { total_month, room_id } = req.body;
+    const { total_month, room_id, rent_for } = req.body;
+
+    const date = new Date(rent_for);
+    date.setHours(0, 0, 0, 0);
 
     const room = await prisma.room.findUnique({
       where: {
@@ -15,14 +19,17 @@ exports.rentRoom = async (req, res, next) => {
       },
     });
 
-    const userRoom = await prisma.userRoom.findUnique({
+    const user = await prisma.user.findUnique({
       where: {
-        user_id: req.user_data.id,
+        id: req.user_data.id,
+      },
+      include: {
+        room: true,
       },
     });
 
     // Cek apakah user telah menyewa kamar
-    if (userRoom.room_id) {
+    if (user.room) {
       return res.status(400).json({
         status: false,
         message: "Anda telah mempunyai kamar yang disewa",
@@ -48,11 +55,12 @@ exports.rentRoom = async (req, res, next) => {
       });
     }
 
-    const [payment, roomData, userRoomData] = await prisma.$transaction([
+    const [payment, roomData] = await prisma.$transaction([
       prisma.payment.create({
         data: {
           user_id: req.user_data.id,
           room_id,
+          rent_for: date,
           total_month: Number(total_month),
           total_payment: total_month * room.monthly_price,
         },
@@ -63,14 +71,7 @@ exports.rentRoom = async (req, res, next) => {
         },
         data: {
           status: "DIPESAN",
-        },
-      }),
-      prisma.userRoom.update({
-        where: {
-          user_id: req.user_data.id,
-        },
-        data: {
-          room_id: room_id,
+          user_id: user.id,
         },
       }),
     ]);
@@ -81,7 +82,6 @@ exports.rentRoom = async (req, res, next) => {
       data: {
         payment,
         room: roomData,
-        user_room: userRoomData,
       },
     });
   } catch (error) {
@@ -93,9 +93,9 @@ exports.addPayment = async (req, res, next) => {
   try {
     const { total_month } = req.body;
 
-    const userRoom = await prisma.userRoom.findUnique({
+    const user = await prisma.user.findUnique({
       where: {
-        user_id: req.user_data.id,
+        id: req.user_data.id,
       },
       include: {
         room: true,
@@ -110,38 +110,10 @@ exports.addPayment = async (req, res, next) => {
     });
 
     // Cek apakah user telah menyewa kamar
-    if (!userRoom.room_id) {
+    if (!user.room) {
       return res.status(400).json({
         status: false,
         message: "Anda belum mempunyai kamar yang disewa",
-        data: null,
-      });
-    }
-
-    if (userRoom.due_date && userRoom.due_date < new Date()) {
-      await prisma.$transaction([
-        await prisma.room.update({
-          where: {
-            id: userRoom.room_id,
-          },
-          data: {
-            status: "TERSEDIA",
-          },
-        }),
-        await prisma.userRoom.update({
-          where: {
-            user_id: req.user_data.id,
-          },
-          data: {
-            room_id: null,
-            due_date: null,
-          },
-        }),
-      ]);
-
-      return res.status(400).json({
-        status: false,
-        message: "Masa berlaku sewa kamar anda telah habis. Mohon sewa ulang kamar",
         data: null,
       });
     }
@@ -158,9 +130,9 @@ exports.addPayment = async (req, res, next) => {
       prisma.payment.create({
         data: {
           user_id: req.user_data.id,
-          room_id: userRoom.room_id,
+          room_id: user.room.id,
           total_month: Number(total_month),
-          total_payment: total_month * userRoom.room.monthly_price,
+          total_payment: total_month * user.room.monthly_price,
         },
       }),
     ]);
@@ -184,20 +156,14 @@ exports.getPayments = async (req, res, next) => {
     const limit = 10;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    await checkRooms(req);
+
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({
         take: limit,
         skip: skip,
         include: {
-          user: {
-            include: {
-              my_room: {
-                include: {
-                  room: true,
-                },
-              },
-            },
-          },
+          user: true,
           room: true,
         },
         orderBy: {
@@ -231,6 +197,8 @@ exports.getMyPayments = async (req, res, next) => {
     const { page = 1 } = req.query;
     const limit = 10;
     const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    await checkRooms(req);
 
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({
@@ -354,11 +322,7 @@ exports.changeStatusPayment = async (req, res, next) => {
         id: id,
       },
       include: {
-        user: {
-          include: {
-            my_room: true,
-          },
-        },
+        user: true,
         room: true,
       },
     });
@@ -396,7 +360,7 @@ exports.changeStatusPayment = async (req, res, next) => {
     }
 
     if (status == PAYMENT_STATUS.DITOLAK && payment.room.status == "DIPESAN") {
-      const [payment_data, user_room, room] = await prisma.$transaction([
+      const [payment_data, room] = await prisma.$transaction([
         prisma.payment.update({
           where: {
             id: id,
@@ -405,20 +369,12 @@ exports.changeStatusPayment = async (req, res, next) => {
             status: status,
           },
         }),
-        prisma.userRoom.update({
-          where: {
-            user_id: payment.user_id,
-          },
-          data: {
-            room_id: null,
-            due_date: null,
-          },
-        }),
         prisma.room.update({
           where: {
             id: payment.room_id,
           },
           data: {
+            user_id: null,
             status: "TERSEDIA",
           },
         }),
@@ -429,13 +385,18 @@ exports.changeStatusPayment = async (req, res, next) => {
         message: "Status pembayaran berhasil diubah",
         data: {
           payment: payment_data,
-          user_room,
           room,
         },
       });
     }
 
     if (status == PAYMENT_STATUS.DIKONFIRMASI) {
+      const userPayments = await prisma.payment.count({
+        where: {
+          user_id: payment.user_id,
+          status: "DIKONFIRMASI",
+        },
+      });
       const [payment_data, user_room, room] = await prisma.$transaction([
         prisma.payment.update({
           where: {
@@ -445,12 +406,14 @@ exports.changeStatusPayment = async (req, res, next) => {
             status: status,
           },
         }),
-        prisma.userRoom.update({
+        prisma.user.update({
           where: {
-            user_id: payment.user_id,
+            id: payment.user_id,
           },
           data: {
-            due_date: addDays(payment?.user?.my_room?.due_date, payment.total_month * 30),
+            occupied_since: payment.user.occupied_since || new Date(payment.rent_for),
+            status: userPayments >= 1 ? "LAMA" : "BARU",
+            due_date: addDays(payment.rent_for ? payment.rent_for : payment.user.due_date, payment.total_month * 30),
           },
         }),
         prisma.room.update({
