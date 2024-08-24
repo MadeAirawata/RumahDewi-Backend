@@ -37,12 +37,12 @@ enum USER_STATUS {
 }
 
 model User {
-  id             String      @id @default(uuid())
-  email          String      @unique
-  phone          String?     @unique
+  id             String      @id @default(uuid()) @db.VarChar(40)
+  email          String      @unique @db.VarChar(40)
+  phone          String?     @unique @db.VarChar(15)
   identity       String?
-  name           String
-  password       String
+  name           String      @db.VarChar(40)
+  password       String      @db.VarChar(100)
   role           ROLE        @default(USER)
   room           Room?
   due_date       DateTime?
@@ -56,8 +56,8 @@ model User {
 }
 
 model Room {
-  id            String      @id @default(uuid())
-  user_id       String?     @unique
+  id            String      @id @default(uuid()) @db.VarChar(40)
+  user_id       String?     @unique @db.VarChar(40)
   user          User?       @relation(fields: [user_id], references: [id])
   no_room       Int         @unique @db.SmallInt
   monthly_price Int
@@ -70,10 +70,10 @@ model Room {
 }
 
 model Payment {
-  id            String         @id @default(uuid())
-  user_id       String
+  id            String         @id @default(uuid()) @db.VarChar(40)
+  user_id       String         @db.VarChar(40)
   user          User           @relation(fields: [user_id], references: [id])
-  room_id       String
+  room_id       String         @db.VarChar(40)
   room          Room           @relation(fields: [room_id], references: [id])
   rent_for      DateTime?
   total_month   Int            @db.SmallInt
